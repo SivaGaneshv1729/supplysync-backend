@@ -24,6 +24,33 @@ SupplySync is a service-oriented Django backend with REST APIs and background pr
 - `apps/reports`: runtime reports and reporting endpoints
 - `core`: shared helpers, exceptions, pagination, throttling, permissions
 
+## 🗄️ Database Schema (ERD)
+
+The following diagram represents the core entities and their relationships. All models inherit from a `BaseModel` providing `created_at`, `updated_at`, and soft-delete capabilities.
+
+```mermaid
+erDiagram
+    USER ||--o{ PURCHASE_ORDER : "creates/approves"
+    USER ||--o{ SALES_ORDER : "creates"
+    USER ||--o{ INVENTORY_TRANSACTION : "performs"
+    
+    WAREHOUSE ||--o{ INVENTORY : "contains"
+    WAREHOUSE ||--o{ PURCHASE_ORDER : "ships to"
+    WAREHOUSE ||--o{ SALES_ORDER : "ships from"
+    
+    PRODUCT ||--o{ INVENTORY : "stored as"
+    PRODUCT ||--o{ PURCHASE_ORDER_ITEM : "ordered in"
+    PRODUCT ||--o{ SALES_ORDER_ITEM : "sold in"
+    CATEGORY ||--o{ PRODUCT : "categorizes"
+    
+    SUPPLIER ||--o{ PURCHASE_ORDER : "supplies"
+    
+    PURCHASE_ORDER ||--|{ PURCHASE_ORDER_ITEM : "contains"
+    SALES_ORDER ||--|{ SALES_ORDER_ITEM : "contains"
+    
+    INVENTORY ||--o{ INVENTORY_TRANSACTION : "tracked by"
+```
+
 ## High-Level Flow Charts
 
 ### 1. User Authentication Flow
