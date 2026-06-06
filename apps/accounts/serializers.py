@@ -6,28 +6,12 @@ from .models import UserRole
 
 User = get_user_model()
 
-class RegisterSerializer(serializers.ModelSerializer):
+class RegisterSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True, allow_blank=False, max_length=50)
+    email = serializers.EmailField(required=True, allow_blank=False)
     password = serializers.CharField(write_only=True, validators=[validate_password_strength])
-
-    class Meta:
-        model = User
-        fields = ['username', 'email', 'password', 'full_name', 'role']
-        extra_kwargs = {
-            'username': {'required': True, 'allow_blank': False},
-            'email': {'required': True, 'allow_blank': False},
-            'full_name': {'required': True, 'allow_blank': False},
-            'role': {'required': True, 'allow_null': False, 'allow_blank': False},
-        }
-
-    def create(self, validated_data):
-        user = User.objects.create_user(
-            email=validated_data['email'],
-            password=validated_data['password'],
-            username=validated_data['username'],
-            full_name=validated_data['full_name'],
-            role=validated_data['role']
-        )
-        return user
+    full_name = serializers.CharField(required=True, allow_blank=False, max_length=150)
+    role = serializers.ChoiceField(choices=UserRole.choices, required=True, allow_blank=False)
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True, allow_blank=False)

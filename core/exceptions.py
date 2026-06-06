@@ -2,30 +2,41 @@ from rest_framework.exceptions import APIException, ValidationError, NotAuthenti
 from rest_framework.views import exception_handler
 from django.utils import timezone
 
-class ResourceNotFoundException(APIException):
+class SupplySyncAPIException(APIException):
+    def __init__(self, detail=None, code=None):
+        super().__init__(detail=detail, code=code)
+        if code is not None:
+            self.default_code = code
+
+class ResourceNotFoundException(SupplySyncAPIException):
     status_code = 404
     default_code = 'RESOURCE_NOT_FOUND'
     default_detail = 'Resource not found.'
 
-class DuplicateResourceException(APIException):
+class DuplicateResourceException(SupplySyncAPIException):
     status_code = 409
     default_code = 'DUPLICATE_RESOURCE'
     default_detail = 'Duplicate resource.'
 
-class InsufficientInventoryException(APIException):
+class InsufficientInventoryException(SupplySyncAPIException):
     status_code = 422
     default_code = 'INSUFFICIENT_INVENTORY'
     default_detail = 'Insufficient inventory.'
 
-class InsufficientStockException(APIException):
+class InsufficientStockException(SupplySyncAPIException):
     status_code = 422
     default_code = 'INSUFFICIENT_STOCK_FOR_ORDER'
     default_detail = 'Insufficient stock for order.'
 
-class InvalidOperationException(APIException):
+class InvalidOperationException(SupplySyncAPIException):
     status_code = 422
     default_code = 'INVALID_OPERATION'
     default_detail = 'Invalid operation.'
+
+    def __init__(self, detail=None, code=None):
+        super().__init__(detail, code)
+        if code is not None:
+            self.default_code = code
 
 def custom_exception_handler(exc, context):
     # Call REST framework's default exception handler first,

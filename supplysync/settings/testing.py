@@ -1,7 +1,8 @@
 from .base import *
 
 DEBUG = True
-SECRET_KEY = 'django-insecure-test-key'
+SECRET_KEY = 'django-insecure-test-key-please-change-this-to-a-secure-value'
+ALLOWED_HOSTS = ['*']
 
 DATABASES = {
     'default': {

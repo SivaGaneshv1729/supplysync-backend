@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import NotAuthenticated
 from core.exceptions import InvalidOperationException
 from core.throttles import LoginRateLimitThrottle
 from .serializers import RegisterSerializer, LoginSerializer, ChangePasswordSerializer
@@ -36,7 +37,7 @@ class LoginView(APIView):
 
         try:
             tokens = login_user(request, email, password)
-        except InvalidOperationException as exc:
+        except (InvalidOperationException, NotAuthenticated) as exc:
             throttle.increment(request, self)
             raise exc
 

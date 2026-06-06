@@ -7,17 +7,21 @@ from core.exceptions import InvalidOperationException, DuplicateResourceExceptio
 from .models import User
 
 
-def _build_token_response(user):
+def _build_token_response(user, is_login=False):
     refresh = RefreshToken.for_user(user)
-    return {
-        "id": user.id,
+    response = {
         "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
         "role": user.role,
         "access_token": str(refresh.access_token),
         "refresh_token": str(refresh),
     }
+    if is_login:
+        response["user_id"] = user.id
+    else:
+        response["id"] = user.id
+        response["email"] = user.email
+        response["full_name"] = user.full_name
+    return response
 
 
 def register_user(data: dict):
@@ -32,7 +36,7 @@ def register_user(data: dict):
         full_name=data['full_name'],
         role=data['role'],
     )
-    return user, _build_token_response(user)
+    return user, _build_token_response(user, is_login=False)
 
 
 def login_user(request, email: str, password: str):
@@ -42,7 +46,7 @@ def login_user(request, email: str, password: str):
 
     user.last_login_at = timezone.now()
     user.save(update_fields=['last_login_at'])
-    return _build_token_response(user)
+    return _build_token_response(user, is_login=True)
 
 
 def logout_user(refresh_token: str):

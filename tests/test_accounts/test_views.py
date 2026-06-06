@@ -1,6 +1,7 @@
 import pytest
 from rest_framework import status
 
+pytestmark = pytest.mark.django_db
 
 def test_register_returns_201_with_valid_request(api_client):
     payload = {

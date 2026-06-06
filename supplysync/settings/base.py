@@ -110,7 +110,7 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': os.environ.get('SECRET_KEY', 'default-unsafe-signing-key'),
+    'SIGNING_KEY': os.environ.get('SECRET_KEY', 'supplysync-default-secret-key-change-me-1234567890'),
 }
 
 CELERY_BROKER_URL = 'redis://localhost:6379/1'

@@ -1,9 +1,7 @@
-from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.throttling import BaseThrottle
 from django.core.cache import cache
 
-class LoginRateLimitThrottle(SimpleRateThrottle):
-    scope = 'login'
-    rate = '5/15m'
+class LoginRateLimitThrottle(BaseThrottle):
     cache_format = 'rate-limit:login:%(ident)s'
 
     def get_cache_key(self, request, view):
