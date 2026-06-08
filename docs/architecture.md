@@ -57,11 +57,14 @@ erDiagram
 
 ```mermaid
 flowchart TD
-    A[Client submits login request] --> B[LoginView validates credentials]
-    B --> C[authenticate(email, password)]
-    C -->|valid| D[login_user service updates last login and issues tokens]
-    D --> E[Return access_token + refresh_token]
-    C -->|invalid| F[Return 401 NOT_AUTHENTICATED]
+    A[Client submits login request] --> B[LoginView validates schema]
+    B --> C{Login Service}
+    C -->|valid credentials| D[Update last login & Generate JWT]
+    D --> E[Return 200 OK with tokens]
+    C -->|invalid credentials| F[Raise NotAuthenticated]
+    F --> G[Return 401 Unauthorized]
+    C -->|too many attempts| H[Raise InvalidOperationException]
+    H --> I[Return 429 Too Many Attempts]
 ```
 
 ### 2. Purchase Order Lifecycle

@@ -42,7 +42,7 @@ graph TD
 Ensures stock is reserved atomically to prevent overselling.
 
 ```mermaid
-sequence_chart
+sequenceDiagram
     participant Client
     participant API
     participant DB
