@@ -4,6 +4,7 @@ from apps.sales_orders.services import (
     dispatch_sales_order,
     cancel_sales_order,
 )
+from apps.sales_orders.models import SalesOrderStatus
 from core.exceptions import InvalidOperationException
 
 
@@ -19,12 +20,12 @@ def test_create_sales_order_reserves_inventory_on_creation(db, sample_inventory,
         ]
     }
 
-    so = create_sales_order(data, staff_user.id)
+    so = create_sales_order(data, staff_user.id)    
 
     sample_inventory.refresh_from_db()
-    assert sample_inventory.quantity_reserved == 5
+    assert sample_inventory.quantity_reserved == 5  
     assert sample_inventory.quantity_available == 15
-    assert so.status == 'PENDING'
+    assert so.status == SalesOrderStatus.CONFIRMED
 
 
 def test_create_sales_order_raises_exception_when_insufficient_stock(db, sample_inventory, staff_user):
