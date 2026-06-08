@@ -31,6 +31,9 @@ def adjust_inventory(data: dict, performed_by_user_id: int) -> InventoryTransact
     quantity = data['quantity']
     notes = data.get('notes', '')
     
+    if quantity <= 0:
+        raise InvalidOperationException("Quantity must be greater than zero.", code="INVALID_QUANTITY")
+    
     with transaction.atomic():
         product = Product.objects.filter(id=product_id).first()
         warehouse = Warehouse.objects.filter(id=warehouse_id).first()
@@ -57,7 +60,9 @@ def adjust_inventory(data: dict, performed_by_user_id: int) -> InventoryTransact
             inventory.quantity_available -= quantity
             inventory.quantity_damaged += quantity
         elif transaction_type == TransactionType.ADJUSTMENT:
-            # Adjustment can be positive or negative
+            # Adjustment can be positive or negative in logic, but data['quantity'] should be absolute if type handles sign?
+            # Actually instructions say "ADJUSTMENT may increase or decrease quantity_available". 
+            # If quantity passed is negative for decrease, we check resulting value.
             if inventory.quantity_available + quantity < 0:
                 raise InsufficientInventoryException(code="INSUFFICIENT_INVENTORY")
             inventory.quantity_available += quantity
@@ -73,6 +78,10 @@ def adjust_inventory(data: dict, performed_by_user_id: int) -> InventoryTransact
             notes=notes
         )
         
+    # Invalidate caches
+    cache.delete(f'products:detail:{product_id}')
+    cache.delete('inventory:low-stock')
+        
     process_inventory_updated_event.delay(product_id, warehouse_id, transaction_type, quantity)
     return txn
 
@@ -83,13 +92,17 @@ def transfer_inventory(data: dict, performed_by_user_id: int) -> dict:
     quantity = data['quantity']
     notes = data.get('notes', '')
     
+    if quantity <= 0:
+        raise InvalidOperationException("Quantity must be greater than zero.", code="INVALID_QUANTITY")
+    
     if source_id == dest_id:
         raise ValueError("Source and destination warehouse must be different.")
         
     with transaction.atomic():
         # lock in consistent order to prevent deadlocks
         w_ids = sorted([source_id, dest_id])
-        Inventory.objects.select_for_update().filter(product_id=product_id, warehouse_id__in=w_ids)
+        # MUST evaluate the queryset to actually lock rows
+        list(Inventory.objects.select_for_update().filter(product_id=product_id, warehouse_id__in=w_ids))
         
         source_inv = Inventory.objects.filter(product_id=product_id, warehouse_id=source_id).first()
         if not source_inv or source_inv.quantity_available < quantity:
@@ -119,6 +132,10 @@ def transfer_inventory(data: dict, performed_by_user_id: int) -> dict:
             transaction_type=TransactionType.INBOUND, quantity=quantity,
             reference_id=ref_id, performed_by=performed_by, notes=notes
         )
+        
+    # Invalidate caches
+    cache.delete(f'products:detail:{product_id}')
+    cache.delete('inventory:low-stock')
         
     process_inventory_transfer_event.delay(product_id, source_id, dest_id, quantity)
     return {"outbound": outbound_txn, "inbound": inbound_txn}

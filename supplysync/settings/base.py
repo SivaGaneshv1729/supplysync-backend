@@ -101,9 +101,6 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '5/min',
-    }
 }
 
 SIMPLE_JWT = {
@@ -113,20 +110,20 @@ SIMPLE_JWT = {
     'SIGNING_KEY': os.environ.get('SECRET_KEY', 'supplysync-default-secret-key-change-me-1234567890'),
 }
 
-CELERY_BROKER_URL = 'redis://localhost:6379/1'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/2'
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/1')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/2')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_TIMEZONE = 'Asia/Kolkata'
 
 CELERY_BEAT_SCHEDULE = {
-    'auto_invalidate_low_stock_cache': {
+    'auto-invalidate-low-stock-cache': {
         'task': 'apps.inventory.tasks.auto_invalidate_low_stock_cache',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute='*/5'),
     },
-    'generate_daily_operations_summary': {
+    'generate-daily-operations-summary': {
         'task': 'apps.sales_orders.tasks.generate_daily_operations_summary',
-        'schedule': crontab(hour=0, minute=1),
+        'schedule': crontab(hour=0, minute=0),
     },
 }
 
