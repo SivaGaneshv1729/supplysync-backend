@@ -1,6 +1,7 @@
 from datetime import datetime
 from django.db import transaction
 from django.core.cache import cache
+from django.utils import timezone
 import redis
 from django.conf import settings
 from core.exceptions import InvalidOperationException, ResourceNotFoundException
@@ -21,15 +22,14 @@ import redis
 # Let's write a robust fallback since we don't have direct access to redis-py connection easily without parsing LOCATION.
 
 def _generate_po_number():
-    date_str = datetime.now().strftime("%Y%m%d")
+    date_str = timezone.now().strftime("%Y%m%d")
     key = f"po-sequence:{date_str}"
     
-    # In testing we might be using LocMemCache which behaves differently.
-    try:
+    # Robust daily sequence using Redis as per 4.5
+    if not cache.add(key, 0, timeout=86400):
         seq = cache.incr(key)
-    except ValueError:
-        cache.set(key, 1, timeout=86400)
-        seq = 1
+    else:
+        seq = cache.incr(key)
         
     return f"PO-{date_str}-{str(seq).zfill(4)}"
 
@@ -75,49 +75,51 @@ def create_purchase_order(data: dict, created_by_user_id: int) -> PurchaseOrder:
     return po
 
 def submit_purchase_order(po_id: int) -> PurchaseOrder:
-    po = PurchaseOrder.objects.filter(id=po_id).first()
-    if not po:
-        raise ResourceNotFoundException("Purchase Order not found.")
-        
-    if not po.items.exists():
-        raise InvalidOperationException("Purchase Order has no items.", code="PO_HAS_NO_ITEMS")
-        
-    if po.status != PurchaseOrderStatus.DRAFT:
-        raise InvalidOperationException(f"Cannot submit PO in status {po.status}.", code="INVALID_STATUS")
-        
-    po.status = PurchaseOrderStatus.PENDING_APPROVAL
-    po.save()
+    with transaction.atomic():
+        po = PurchaseOrder.objects.select_for_update().filter(id=po_id).first()
+        if not po:
+            raise ResourceNotFoundException("Purchase Order not found.")
+            
+        if not po.items.exists():
+            raise InvalidOperationException("Purchase Order has no items.", code="PO_HAS_NO_ITEMS")
+            
+        if po.status != PurchaseOrderStatus.DRAFT:
+            raise InvalidOperationException(f"Cannot submit PO in status {po.status}.", code="INVALID_STATUS")
+            
+        po.status = PurchaseOrderStatus.PENDING_APPROVAL
+        po.save()
     return po
 
 def approve_purchase_order(po_id: int, approved_by_user_id: int) -> PurchaseOrder:
-    po = PurchaseOrder.objects.filter(id=po_id).first()
-    if not po:
-        raise ResourceNotFoundException("Purchase Order not found.")
-        
-    if po.status != PurchaseOrderStatus.PENDING_APPROVAL:
-        raise InvalidOperationException(f"Cannot approve PO in status {po.status}.", code="INVALID_STATUS")
-        
-    if po.created_by_id == approved_by_user_id:
-        from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied(detail="Self approval not allowed.", code="SELF_APPROVAL_NOT_ALLOWED")
-        
-    po.status = PurchaseOrderStatus.APPROVED
-    po.approved_by_id = approved_by_user_id
-    po.save()
+    with transaction.atomic():
+        po = PurchaseOrder.objects.select_for_update().filter(id=po_id).first()
+        if not po:
+            raise ResourceNotFoundException("Purchase Order not found.")
+            
+        if po.status != PurchaseOrderStatus.PENDING_APPROVAL:
+            raise InvalidOperationException(f"Cannot approve PO in status {po.status}.", code="INVALID_STATUS")
+            
+        if po.created_by_id == approved_by_user_id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(detail="Self approval not allowed.", code="SELF_APPROVAL_NOT_ALLOWED")
+            
+        po.status = PurchaseOrderStatus.APPROVED
+        po.approved_by_id = approved_by_user_id
+        po.save()
     return po
 
 def receive_purchase_order(po_id: int, data: dict, performed_by_user_id: int) -> PurchaseOrder:
-    po = PurchaseOrder.objects.filter(id=po_id).first()
-    if not po:
-        raise ResourceNotFoundException("Purchase Order not found.")
-        
-    if po.status not in [PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED]:
-        raise InvalidOperationException(f"Cannot receive PO in status {po.status}.", code="INVALID_STATUS")
-        
-    items_to_receive = {item['po_item_id']: item['quantity_received'] for item in data['items']}
-    
     with transaction.atomic():
-        po_items = list(po.items.all())
+        po = PurchaseOrder.objects.select_for_update().filter(id=po_id).first()
+        if not po:
+            raise ResourceNotFoundException("Purchase Order not found.")
+            
+        if po.status not in [PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED]:
+            raise InvalidOperationException(f"Cannot receive PO in status {po.status}.", code="INVALID_STATUS")
+            
+        items_to_receive = {item['po_item_id']: item['quantity_received'] for item in data['items']}
+        
+        po_items = list(po.items.select_for_update())
         all_fully_received = True
         
         for item in po_items:
@@ -153,15 +155,16 @@ def receive_purchase_order(po_id: int, data: dict, performed_by_user_id: int) ->
     return po
 
 def cancel_purchase_order(po_id: int, reason: str) -> PurchaseOrder:
-    po = PurchaseOrder.objects.filter(id=po_id).first()
-    if not po:
-        raise ResourceNotFoundException("Purchase Order not found.")
-        
-    allowed_statuses = [PurchaseOrderStatus.DRAFT, PurchaseOrderStatus.PENDING_APPROVAL, PurchaseOrderStatus.APPROVED]
-    if po.status not in allowed_statuses:
-        raise InvalidOperationException(f"Cannot cancel PO in status {po.status}.", code="PO_CANCELLATION_NOT_ALLOWED")
-        
-    po.status = PurchaseOrderStatus.CANCELLED
-    po.notes = (po.notes or '') + f"\nCancelled: {reason}"
-    po.save()
+    with transaction.atomic():
+        po = PurchaseOrder.objects.select_for_update().filter(id=po_id).first()
+        if not po:
+            raise ResourceNotFoundException("Purchase Order not found.")
+            
+        allowed_statuses = [PurchaseOrderStatus.DRAFT, PurchaseOrderStatus.PENDING_APPROVAL, PurchaseOrderStatus.APPROVED]
+        if po.status not in allowed_statuses:
+            raise InvalidOperationException(f"Cannot cancel PO in status {po.status}.", code="PO_CANCELLATION_NOT_ALLOWED")
+            
+        po.status = PurchaseOrderStatus.CANCELLED
+        po.notes = (po.notes or '') + f"\nCancelled: {reason}"
+        po.save()
     return po
